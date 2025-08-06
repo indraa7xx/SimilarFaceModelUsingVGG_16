@@ -1,0 +1,67 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.preprocessing import image
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+from tensorflow.keras.models import Model
+from sklearn.metrics.pairwise import cosine_similarity
+import os
+
+# tweaking the modellll 
+
+def get_feature_extractor():
+    base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    model = Model(inputs=base_model.input, outputs=base_model.get_layer('block5_pool').output)
+    return model
+
+# we load the model 
+def process_image(img_path, model): 
+    img = image.load_img(img_path, target_size=(224, 224)) 
+    img_array = image.img_to_array(img)
+    expanded_img_array = np.expand_dims(img_array, axis=0)  
+    preprocessed_img = preprocess_input(expanded_img_array)  
+    features = model.predict(preprocessed_img) 
+    flattened_features = features.flatten()  
+    normalized_features = flattened_features / np.linalg.norm(flattened_features)  
+    return normalized_features
+
+# use !unzip -o test_image.zip & !unzip -o training_images.zip
+
+# the main stufffffff 
+
+if __name__ == "__main__":
+    feature_extractor = get_feature_extractor()
+    training_dir = 'images_for_model'
+    if not os.path.exists(training_dir) or not os.listdir(training_dir):
+        print(f"Error:'{training_dir}'")
+        print("training images are not aproprite")
+    else:
+        print("creating a vectorrr")
+        training_vectors = []
+        for img_name in os.listdir(training_dir):
+            img_path = os.path.join(training_dir, img_name)
+            if img_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+                print(f"Processing {img_name}")
+                vector = process_image(img_path, feature_extractor)
+                training_vectors.append(vector)
+        prototype_vector = np.mean(training_vectors, axis=0)
+        print("prototype vector created") 
+        test_dir = 'test_image'
+        if not os.path.exists(test_dir) or not os.listdir(test_dir):
+             print(f"The directory '{test_dir}' is empty")
+        else:
+            print("\n--- Comparing New Images ---")
+            for img_name in os.listdir(test_dir):
+                test_image_path = os.path.join(test_dir, img_name)
+                if test_image_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+                    new_image_vector = process_image(test_image_path, feature_extractor)
+                    similarity = cosine_similarity(prototype_vector.reshape(1, -1), new_image_vector.reshape(1, -1))
+                    score = similarity[0][0]
+                    SIMILARITY_THRESHOLD = 0.44
+
+                    print(f"\n the person in question: {img_name}")
+                    print(f"cos similar score: {score:.4f}")
+
+                    if score > SIMILARITY_THRESHOLD:
+                        print("The person is similar")
+                    else:
+                        print("The person isnt similar")
